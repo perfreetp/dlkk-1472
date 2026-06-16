@@ -152,7 +152,9 @@ export function Result() {
     materials,
     precheckResult,
     versionHistories,
+    reportLogs,
     runPrecheck,
+    addReportLog,
     isLoading,
   } = useDeclarationStore();
 
@@ -171,6 +173,7 @@ export function Result() {
     premises,
     precheckResult,
     selfCheckScore: declaration.selfCheckScore,
+    addReportLog: (t: any, n: string) => addReportLog(t, n),
   };
 
   const handleDownload = async () => {
@@ -431,6 +434,95 @@ export function Result() {
               </div>
             </div>
           </div>
+        </section>
+
+        <section className="bg-white rounded-xl shadow-sm p-6">
+          <h2 className="text-xl font-semibold text-gray-800 mb-6 flex items-center gap-2">
+            <Clock className="w-5 h-5" />
+            <FileText className="w-5 h-5" />
+            报告生成记录
+          </h2>
+
+          {reportLogs.length === 0 ? (
+            <div className="text-center text-gray-400 py-12">
+              <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>暂无报告生成记录</p>
+            </div>
+          ) : (
+            <div className="relative">
+              <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" />
+              <div className="space-y-3">
+                {reportLogs.map((log) => {
+                  const badgeConfig = {
+                    preview: {
+                      bg: 'bg-blue-100',
+                      text: 'text-blue-600',
+                      border: 'border-blue-200',
+                      icon: Eye,
+                      label: '预览',
+                    },
+                    print: {
+                      bg: 'bg-blue-50',
+                      text: 'text-blue-600',
+                      border: 'border-blue-200',
+                      icon: Printer,
+                      label: '打印',
+                    },
+                    download: {
+                      bg: 'bg-green-100',
+                      text: 'text-green-600',
+                      border: 'border-green-200',
+                      icon: Download,
+                      label: '下载',
+                    },
+                  }[log.operationType];
+                  const BadgeIcon = badgeConfig.icon;
+
+                  return (
+                    <div key={log.id} className="relative pl-10">
+                      <div className="absolute left-2 top-3 w-5 h-5 rounded-full bg-white border-4 border-gray-300" />
+                      <div className="rounded-lg p-4 bg-gray-50 border border-gray-200">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${badgeConfig.bg} ${badgeConfig.text} ${badgeConfig.border}`}
+                            >
+                              <BadgeIcon className="w-3 h-3" />
+                              {badgeConfig.label}
+                            </span>
+                            <span className="font-medium text-gray-800">{log.operationName}</span>
+                            {log.version && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                                V{log.version}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-sm text-gray-500 flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" />
+                            {formatDate(log.createdAt)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-600">
+                            自查 {log.selfCheckScore} 分
+                          </span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-red-50 text-red-600">
+                            缺失 {log.missingCount}
+                          </span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-yellow-50 text-yellow-600">
+                            疑点 {log.doubtCount}
+                          </span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-600">
+                            建议 {log.suggestionCount}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="bg-white rounded-xl shadow-sm p-6">

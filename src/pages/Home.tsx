@@ -12,6 +12,7 @@ import {
   FileText,
   ArrowRight,
   History,
+  AlertTriangle,
 } from 'lucide-react';
 import { useDeclarationStore } from '@/store/declarationStore';
 import type { BusinessType } from '@/types';
@@ -91,10 +92,18 @@ const faqItems: FaqItem[] = [
 
 export function Home() {
   const navigate = useNavigate();
-  const { declaration, setBusinessType } = useDeclarationStore();
+  const { declaration, materials, setBusinessType } = useDeclarationStore();
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
   const handleBusinessTypeSelect = (type: BusinessType) => {
+    const hasUploaded = materials.some((m) => m.fileName && m.fileName.length > 0);
+    if (
+      type !== declaration.businessType &&
+      declaration.currentStep > 1 &&
+      hasUploaded
+    ) {
+      if (!confirm('切换经营方式将重置材料清单，已上传的文件名和状态会被清空，是否继续？')) return;
+    }
     setBusinessType(type);
   };
 

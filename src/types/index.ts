@@ -110,6 +110,20 @@ export interface PrecheckItem {
   relatedPage?: string;
 }
 
+export type ReportOperationType = 'preview' | 'print' | 'download';
+
+export interface ReportLog {
+  id: string;
+  operationType: ReportOperationType;
+  operationName: string;
+  createdAt: string;
+  selfCheckScore: number;
+  missingCount: number;
+  doubtCount: number;
+  suggestionCount: number;
+  version?: number;
+}
+
 export interface PrecheckResult {
   declarationId: string;
   missingItems: PrecheckItem[];

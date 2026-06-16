@@ -10,6 +10,9 @@ import type {
   PrecheckResult,
   PrecheckItem,
   BusinessType,
+  ReportLog,
+  ReportOperationType,
+  MaterialStatus,
 } from '@/types';
 import { mockData } from '@/data/mockData';
 import { generateMaterialsByBusinessType } from '@/data/materialTemplates';
@@ -70,12 +73,12 @@ const getDaysUntil = (dateStr: string): number => {
   return Math.ceil((target - now) / (1000 * 60 * 60 * 24));
 };
 
-const businessTypeKeywords: Record<BusinessType, string[]> = {
-  gasoline: ['汽油', '成品油', '石油'],
-  diesel: ['柴油', '成品油'],
-  storage: ['仓储', '储存'],
-  bill: ['票据', '贸易', '批发（无储存）'],
-  other: [],
+const businessTypeKeywords: Record<BusinessType, { must: string[]; alias: string[] }> = {
+  gasoline: { must: ['汽油'], alias: ['汽油零售', '车用汽油', '乙醇汽油'] },
+  diesel: { must: ['柴油'], alias: ['柴油零售', '车用柴油'] },
+  storage: { must: ['仓储', '储存'], alias: ['仓储经营', '储存经营', '带储存'] },
+  bill: { must: ['票据', '无储存', '不带储存', '批发'], alias: ['票据贸易', '票据经营', '批发（无储存）', '批发（不带储存）', '不带储存设施经营'] },
+  other: { must: [], alias: [] },
 };
 
 const businessTypeNames: Record<BusinessType, string> = {
@@ -86,18 +89,30 @@ const businessTypeNames: Record<BusinessType, string> = {
   other: '其他经营方式',
 };
 
-const checkBusinessScopeMatch = (businessType: BusinessType, scope: string): { matched: boolean; missingKeywords: string[] } => {
+const businessTypeDescriptions: Record<BusinessType, string> = {
+  gasoline: '汽油字样（许可范围中应包含「汽油」）',
+  diesel: '柴油字样（许可范围中应包含「柴油」）',
+  storage: '仓储或储存字样（许可范围中应包含「仓储」或「储存」）',
+  bill: '票据/无储存/批发字样（许可范围应包含「票据」「无储存」「不带储存」「批发」等）',
+  other: '其他经营方式',
+};
+
+const checkBusinessScopeMatch = (businessType: BusinessType, scope: string): { matched: boolean; matchedText: string } => {
   if (!scope) {
-    return { matched: false, missingKeywords: [] };
+    return { matched: false, matchedText: '许可范围为空' };
   }
   const keywords = businessTypeKeywords[businessType];
-  if (keywords.length === 0) {
-    return { matched: true, missingKeywords: [] };
+  if (keywords.must.length === 0) {
+    return { matched: true, matchedText: '其他经营方式，无需特定范围' };
   }
-  const missingKeywords = keywords.filter((k) => !scope.includes(k));
+  const allKeywords = [...keywords.must, ...keywords.alias];
+  const matchedKeyword = allKeywords.find((k) => scope.includes(k));
+  if (matchedKeyword) {
+    return { matched: true, matchedText: `匹配到关键词「${matchedKeyword}」，与经营方式相符` };
+  }
   return {
-    matched: missingKeywords.length === 0,
-    missingKeywords,
+    matched: false,
+    matchedText: `未包含${businessTypeDescriptions[businessType]}，当前范围为「${scope}」`,
   };
 };
 
@@ -188,8 +203,8 @@ const runPrecheckLogic = (
         id: nextId(),
         level: 'warning',
         title: '经营方式与许可范围不匹配',
-        description: `您选择的经营方式为「${btName}」，但原许可证许可范围中未包含「${scopeCheck.missingKeywords.join('、')}」等相关表述。\n当前许可范围：${license.scope}`,
-        suggestion: `请核实经营方式是否正确，或确认许可范围是否包含「${scopeCheck.missingKeywords.join('、')}」。如许可范围确实不包含拟经营的品种，请先办理许可范围变更后再申请换证。`,
+        description: `您选择的经营方式为「${btName}」，${scopeCheck.matchedText}。\n当前许可范围：${license.scope}`,
+        suggestion: `请核实：\n1. 经营方式选择是否正确；\n2. 原许可证的许可范围是否完整录入；\n3. 如许可范围确实不包含拟经营的品种，建议先办理许可范围变更，再申请换证。`,
         relatedPage: 'license',
       });
     }
@@ -400,6 +415,7 @@ interface DeclarationStore {
   materials: Material[];
   versionHistories: VersionHistory[];
   precheckResult: PrecheckResult | null;
+  reportLogs: ReportLog[];
   isLoading: boolean;
 
   setBusinessType: (type: BusinessType) => void;
@@ -411,9 +427,12 @@ interface DeclarationStore {
   setPremises: (data: Partial<Premises>) => void;
   setMaterials: (materials: Material[]) => void;
   updateMaterial: (id: string, data: Partial<Material>) => void;
+  batchUpdateMaterialsStatus: (status: MaterialStatus) => void;
+  fillMockMaterials: () => void;
   saveVersion: (changes: string) => void;
   runPrecheck: () => void;
   calculateSelfCheckScore: () => number;
+  addReportLog: (operationType: ReportOperationType, operationName: string) => void;
   resetDeclaration: () => void;
   loadMockData: () => void;
 }
@@ -440,6 +459,7 @@ const getInitialState = (): Omit<DeclarationStore, keyof { [K in keyof Declarati
     materials: generateMaterialsByBusinessType(declaration.businessType, declaration.id),
     versionHistories: [],
     precheckResult: null,
+    reportLogs: [],
     isLoading: false,
   };
 };
@@ -526,6 +546,60 @@ export const useDeclarationStore = create<DeclarationStore>((set, get) => ({
     }));
   },
 
+  batchUpdateMaterialsStatus: (status: MaterialStatus) => {
+    set((state) => ({
+      materials: state.materials.map((m) =>
+        m.required
+          ? {
+              ...m,
+              status,
+              fileName: status === 'uploaded' ? (m.fileName || `${m.name}_示例.pdf`) : m.fileName,
+            }
+          : m
+      ),
+      declaration: { ...state.declaration, updatedAt: new Date().toISOString() },
+    }));
+    const score = get().calculateSelfCheckScore();
+    return score;
+  },
+
+  fillMockMaterials: () => {
+    const mockFileNames: Record<string, string> = {
+      '营业执照副本': '营业执照_2026.jpg',
+      '法定代表人身份证明': '法人身份证正反面.jpg',
+      '原成品油经营批准证书（如有）': '成品油批准证书.pdf',
+      '主要负责人安全资格证书': '主要负责人证_张明.pdf',
+      '安全生产管理人员安全资格证书': '安全员证_王强.pdf',
+      '从业人员培训合格证明': '从业人员培训合格证.pdf',
+      '从业人员安全培训记录': '年度安全培训记录.xlsx',
+      '经营场所产权证明或租赁协议': '经营场所房产证.pdf',
+      '储存场所产权证明或租赁协议': '储存场所租赁协议.pdf',
+      '安全评价报告': '安全评价现状报告_2026.pdf',
+      '安全管理制度汇编': '安全管理制度汇编_v3.pdf',
+      '安全生产责任制': '安全生产责任制文件.pdf',
+      '生产安全事故应急预案': '应急预案_v2.pdf',
+      '应急预案备案登记表': '应急预案备案回执.pdf',
+      '应急演练记录': '年度应急演练记录.docx',
+      '消防设施验收或检测合格证明': '消防检测报告_2026.pdf',
+      '申报材料真实性承诺书': '承诺书_签字盖章.pdf',
+      '加油机计量检定证书': '加油机检定证书.pdf',
+      '油气回收系统检测报告': '油气回收检测报告.pdf',
+      '柴油储罐检测报告': '储罐年度检测报告.pdf',
+      '仓储设施安全检测报告': '仓储设施检测报告.pdf',
+      '危险化学品购销合同': '购销合同样本.pdf',
+      '供货单位资质证明': '上游供货单位资质.pdf',
+    };
+    set((state) => ({
+      materials: state.materials.map((m) => ({
+        ...m,
+        status: 'uploaded' as MaterialStatus,
+        fileName: mockFileNames[m.name] || `${m.name}_示例.pdf`,
+      })),
+      declaration: { ...state.declaration, updatedAt: new Date().toISOString() },
+    }));
+    get().calculateSelfCheckScore();
+  },
+
   saveVersion: (changes: string) => {
     const { declaration, enterprise, license, personCerts, premises, materials, versionHistories } = get();
     const newVersion: VersionHistory = {
@@ -589,6 +663,24 @@ export const useDeclarationStore = create<DeclarationStore>((set, get) => ({
     return score;
   },
 
+  addReportLog: (operationType: ReportOperationType, operationName: string) => {
+    const { declaration, precheckResult, reportLogs, versionHistories } = get();
+    const log: ReportLog = {
+      id: generateId(),
+      operationType,
+      operationName,
+      createdAt: new Date().toISOString(),
+      selfCheckScore: declaration.selfCheckScore,
+      missingCount: precheckResult?.missingItems.length || 0,
+      doubtCount: precheckResult?.doubtItems.length || 0,
+      suggestionCount: precheckResult?.suggestions.length || 0,
+      version: versionHistories.length > 0 ? versionHistories[versionHistories.length - 1].version : undefined,
+    };
+    set({
+      reportLogs: [log, ...reportLogs].slice(0, 20),
+    });
+  },
+
   resetDeclaration: () => {
     const declaration = createEmptyDeclaration();
     set({
@@ -600,6 +692,7 @@ export const useDeclarationStore = create<DeclarationStore>((set, get) => ({
       materials: generateMaterialsByBusinessType(declaration.businessType, declaration.id),
       versionHistories: [],
       precheckResult: null,
+      reportLogs: [],
       isLoading: false,
     });
     if (typeof window !== 'undefined') {
@@ -621,6 +714,7 @@ export const useDeclarationStore = create<DeclarationStore>((set, get) => ({
       materials: mockData.materials.map((m) => ({ ...m })),
       versionHistories: mockData.versionHistories.map((v) => ({ ...v })),
       precheckResult: null,
+      reportLogs: [],
       isLoading: false,
     });
   },
@@ -638,6 +732,7 @@ useDeclarationStore.subscribe((state) => {
         materials,
         versionHistories,
         precheckResult,
+        reportLogs,
         isLoading,
       } = state;
       localStorage.setItem(
@@ -651,6 +746,7 @@ useDeclarationStore.subscribe((state) => {
           materials,
           versionHistories,
           precheckResult,
+          reportLogs,
           isLoading,
         })
       );

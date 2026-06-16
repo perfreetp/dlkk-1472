@@ -15,6 +15,8 @@ import {
   ChevronDown,
   ChevronRight,
   AlertCircle,
+  Zap,
+  UploadCloud,
 } from 'lucide-react';
 import { useDeclarationStore } from '@/store/declarationStore';
 import { formatDate } from '@/utils/dateUtils';
@@ -30,7 +32,15 @@ const MATERIAL_CATEGORIES = [
 
 type MaterialCategory = (typeof MATERIAL_CATEGORIES)[number];
 
-const CircularProgress = ({ score }: { score: number }) => {
+const CircularProgress = ({
+  score,
+  onFillMock,
+  onBatchUpload,
+}: {
+  score: number;
+  onFillMock: () => void;
+  onBatchUpload: () => void;
+}) => {
   const radius = 60;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (score / 100) * circumference;
@@ -79,7 +89,7 @@ const CircularProgress = ({ score }: { score: number }) => {
           <span className="text-sm text-gray-500">分</span>
         </div>
       </div>
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 flex-1">
         <div>
           <span className="text-xl font-semibold">当前等级：</span>
           <span className={`text-xl font-bold ${grade.color}`}>{grade.text}</span>
@@ -91,6 +101,22 @@ const CircularProgress = ({ score }: { score: number }) => {
           <p>• 场所设施（15分）：经营地址5分，储存地址5分，安全设备5分</p>
           <p>• 材料完整性（25分）：必填材料上传比例×25</p>
         </div>
+      </div>
+      <div className="flex flex-col gap-3">
+        <button
+          onClick={onFillMock}
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors whitespace-nowrap"
+        >
+          <Zap className="w-4 h-4" />
+          一键补齐示例材料
+        </button>
+        <button
+          onClick={onBatchUpload}
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors whitespace-nowrap"
+        >
+          <UploadCloud className="w-4 h-4" />
+          批量标记已上传
+        </button>
       </div>
     </div>
   );
@@ -178,6 +204,8 @@ export function Materials() {
     saveVersion,
     runPrecheck,
     isLoading,
+    batchUpdateMaterialsStatus,
+    fillMockMaterials,
   } = useDeclarationStore();
 
   const [expandedCategory, setExpandedCategory] = useState<MaterialCategory | null>(
@@ -222,7 +250,11 @@ export function Materials() {
               重新计算
             </button>
           </div>
-          <CircularProgress score={declaration.selfCheckScore} />
+          <CircularProgress
+            score={declaration.selfCheckScore}
+            onFillMock={fillMockMaterials}
+            onBatchUpload={() => batchUpdateMaterialsStatus('uploaded')}
+          />
         </section>
 
         <section className="bg-white rounded-xl shadow-sm p-6">
