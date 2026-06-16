@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -16,11 +16,15 @@ import {
   FileText,
   GitCompare,
   Eye,
+  CheckSquare,
+  Square,
+  Filter,
+  Calendar,
 } from 'lucide-react';
 import { useDeclarationStore } from '@/store/declarationStore';
 import { formatDate } from '@/utils/dateUtils';
-import { generatePDF, printReport, previewReport } from '@/services/reportService';
-import type { PrecheckItem } from '@/types';
+import { generatePDF, printReport, previewReport, previewReportBySnapshot } from '@/services/reportService';
+import type { PrecheckItem, ReportLog, ReportOperationType } from '@/types';
 
 const getConclusion = (score: number, missingCount: number) => {
   if (score >= 80 && missingCount === 0) {
@@ -161,10 +165,120 @@ export function Result() {
   const [showDownloadToast, setShowDownloadToast] = useState(false);
   const [selectedVersions, setSelectedVersions] = useState<string[]>([]);
 
+  const [selectedEnterprise, setSelectedEnterprise] = useState<string>('all');
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedOperation, setSelectedOperation] = useState<string>('all');
+  const [expandedLogIds, setExpandedLogIds] = useState<Set<string>>(new Set());
+  const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
+
   const missingItems = precheckResult?.missingItems || [];
   const doubtItems = precheckResult?.doubtItems || [];
   const suggestions = precheckResult?.suggestions || [];
   const conclusion = getConclusion(declaration.selfCheckScore, missingItems.length);
+
+  const enterpriseOptions = useMemo(() => {
+    const unique = new Map<string, string>();
+    reportLogs.forEach((log) => {
+      if (log.enterpriseCreditCode) {
+        unique.set(log.enterpriseCreditCode, log.enterpriseName);
+      }
+    });
+    return Array.from(unique.entries()).map(([creditCode, name]) => ({
+      value: creditCode,
+      label: name || creditCode,
+    }));
+  }, [reportLogs]);
+
+  const filteredLogs = useMemo(() => {
+    return reportLogs.filter((log) => {
+      if (selectedEnterprise !== 'all' && log.enterpriseCreditCode !== selectedEnterprise) {
+        return false;
+      }
+      if (selectedDate && log.dateKey !== selectedDate) {
+        return false;
+      }
+      if (selectedOperation !== 'all' && log.operationType !== selectedOperation) {
+        return false;
+      }
+      return true;
+    });
+  }, [reportLogs, selectedEnterprise, selectedDate, selectedOperation]);
+
+  const toggleLogExpand = (logId: string) => {
+    setExpandedLogIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(logId)) {
+        next.delete(logId);
+      } else {
+        next.add(logId);
+      }
+      return next;
+    });
+  };
+
+  const getDaysUntil = (dateStr: string): number => {
+    if (!dateStr) return Infinity;
+    const target = new Date(dateStr).getTime();
+    const now = Date.now();
+    return Math.ceil((target - now) / (1000 * 60 * 60 * 24));
+  };
+
+  const checklistItems = useMemo(() => {
+    const items: Array<{
+      id: string;
+      priority: 'P0' | 'P1' | 'P2';
+      title: string;
+    }> = [];
+
+    missingItems.forEach((item) => {
+      items.push({
+        id: `missing-${item.id}`,
+        priority: 'P0',
+        title: item.title,
+      });
+    });
+
+    const licenseDays = getDaysUntil(license.validTo);
+    if (license.validTo && licenseDays <= 90) {
+      items.push({
+        id: 'license-expiry',
+        priority: 'P0',
+        title: `许可证即将到期（剩余${licenseDays}天）`,
+      });
+    }
+
+    doubtItems.forEach((item) => {
+      items.push({
+        id: `doubt-${item.id}`,
+        priority: 'P1',
+        title: item.title,
+      });
+    });
+
+    suggestions.forEach((item) => {
+      items.push({
+        id: `suggestion-${item.id}`,
+        priority: 'P2',
+        title: item.title,
+      });
+    });
+
+    return items;
+  }, [missingItems, doubtItems, suggestions, license.validTo]);
+
+  const toggleCheckItem = (itemId: string) => {
+    setCheckedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) {
+        next.delete(itemId);
+      } else {
+        next.add(itemId);
+      }
+      return next;
+    });
+  };
+
+  const allChecked = checklistItems.length > 0 && checkedItems.size === checklistItems.length;
 
   const reportData = {
     declaration,
@@ -234,6 +348,92 @@ export function Result() {
               </div>
               <div className="text-xs text-gray-500">综合评估结论</div>
             </div>
+          </div>
+        </section>
+
+        <section className="bg-white rounded-xl shadow-sm p-6">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+            <CheckSquare className="w-5 h-5" />
+            📋 提交前核对清单
+          </h2>
+
+          <div className="mb-4 flex items-center justify-between">
+            <div className="text-sm text-gray-600">
+              已核对 <span className="font-semibold text-blue-600">{checkedItems.size}</span> / {checklistItems.length} 项
+            </div>
+            <div className="w-48 bg-gray-200 rounded-full h-2 overflow-hidden">
+              <div
+                className="h-full bg-blue-500 transition-all duration-300"
+                style={{ width: `${checklistItems.length > 0 ? (checkedItems.size / checklistItems.length) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
+
+          {allChecked && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
+              <CheckCircle2 className="w-5 h-5" />
+              <span className="font-medium">✅ 所有关键项已核对，可前往窗口提交</span>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {checklistItems.length === 0 ? (
+              <div className="text-center text-gray-400 py-8">
+                暂无核对项
+              </div>
+            ) : (
+              checklistItems.map((item) => {
+                const isChecked = checkedItems.has(item.id);
+                const priorityConfig = {
+                  P0: {
+                    bg: 'bg-red-100',
+                    text: 'text-red-700',
+                    border: 'border-red-200',
+                  },
+                  P1: {
+                    bg: 'bg-yellow-100',
+                    text: 'text-yellow-700',
+                    border: 'border-yellow-200',
+                  },
+                  P2: {
+                    bg: 'bg-blue-100',
+                    text: 'text-blue-700',
+                    border: 'border-blue-200',
+                  },
+                }[item.priority];
+
+                return (
+                  <label
+                    key={item.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                      isChecked
+                        ? 'bg-gray-50 border-gray-200'
+                        : 'bg-white border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleCheckItem(item.id)}
+                      className="flex-shrink-0"
+                    >
+                      {isChecked ? (
+                        <CheckSquare className="w-5 h-5 text-blue-600" />
+                      ) : (
+                        <Square className="w-5 h-5 text-gray-400" />
+                      )}
+                    </button>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border ${priorityConfig.bg} ${priorityConfig.text} ${priorityConfig.border}`}
+                    >
+                      {item.priority}
+                    </span>
+                    <span className={`flex-1 text-sm ${isChecked ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                      {item.title}
+                    </span>
+                  </label>
+                );
+              })
+            )}
           </div>
         </section>
 
@@ -437,22 +637,77 @@ export function Result() {
         </section>
 
         <section className="bg-white rounded-xl shadow-sm p-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-6 flex items-center gap-2">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
             <Clock className="w-5 h-5" />
             <FileText className="w-5 h-5" />
             报告生成记录
           </h2>
+
+          <div className="mb-4 flex flex-wrap items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-gray-500" />
+              <span className="text-sm text-gray-600 font-medium">筛选：</span>
+            </div>
+
+            <select
+              value={selectedEnterprise}
+              onChange={(e) => setSelectedEnterprise(e.target.value)}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">全部企业</option>
+              {enterpriseOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+
+            <div className="flex items-center gap-1">
+              <Calendar className="w-4 h-4 text-gray-500" />
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              {selectedDate && (
+                <button
+                  onClick={() => setSelectedDate('')}
+                  className="text-xs text-gray-500 hover:text-gray-700"
+                >
+                  清除
+                </button>
+              )}
+            </div>
+
+            <select
+              value={selectedOperation}
+              onChange={(e) => setSelectedOperation(e.target.value)}
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">全部操作</option>
+              <option value="preview">预览</option>
+              <option value="print">打印</option>
+              <option value="download">下载</option>
+            </select>
+          </div>
 
           {reportLogs.length === 0 ? (
             <div className="text-center text-gray-400 py-12">
               <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>暂无报告生成记录</p>
             </div>
+          ) : filteredLogs.length === 0 ? (
+            <div className="text-center text-gray-400 py-12">
+              <Filter className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>没有符合筛选条件的记录</p>
+            </div>
           ) : (
             <div className="relative">
               <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200" />
               <div className="space-y-3">
-                {reportLogs.map((log) => {
+                {filteredLogs.map((log) => {
+                  const isExpanded = expandedLogIds.has(log.id);
                   const badgeConfig = {
                     preview: {
                       bg: 'bg-blue-100',
@@ -477,45 +732,138 @@ export function Result() {
                     },
                   }[log.operationType];
                   const BadgeIcon = badgeConfig.icon;
+                  const snapshotMissing = log.snapshot?.precheckResult?.missingItems || [];
+                  const snapshotDoubt = log.snapshot?.precheckResult?.doubtItems || [];
+                  const snapshotSuggestion = log.snapshot?.precheckResult?.suggestions || [];
 
                   return (
                     <div key={log.id} className="relative pl-10">
                       <div className="absolute left-2 top-3 w-5 h-5 rounded-full bg-white border-4 border-gray-300" />
-                      <div className="rounded-lg p-4 bg-gray-50 border border-gray-200">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${badgeConfig.bg} ${badgeConfig.text} ${badgeConfig.border}`}
-                            >
-                              <BadgeIcon className="w-3 h-3" />
-                              {badgeConfig.label}
-                            </span>
-                            <span className="font-medium text-gray-800">{log.operationName}</span>
-                            {log.version && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
-                                V{log.version}
+                      <div className="rounded-lg border border-gray-200 overflow-hidden">
+                        <button
+                          onClick={() => toggleLogExpand(log.id)}
+                          className="w-full text-left p-4 bg-gray-50 hover:bg-gray-100 transition-colors"
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${badgeConfig.bg} ${badgeConfig.text} ${badgeConfig.border}`}
+                              >
+                                <BadgeIcon className="w-3 h-3" />
+                                {badgeConfig.label}
                               </span>
-                            )}
+                              <span className="font-medium text-gray-800">{log.operationName}</span>
+                              {log.version && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                                  V{log.version}
+                                </span>
+                              )}
+                              {log.enterpriseName && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-600 border border-purple-200">
+                                  {log.enterpriseName}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gray-500 flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5" />
+                                {formatDate(log.createdAt)}
+                              </span>
+                              {isExpanded ? (
+                                <ChevronDown className="w-4 h-4 text-gray-500" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4 text-gray-500" />
+                              )}
+                            </div>
                           </div>
-                          <span className="text-sm text-gray-500 flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" />
-                            {formatDate(log.createdAt)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-600">
-                            自查 {log.selfCheckScore} 分
-                          </span>
-                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-red-50 text-red-600">
-                            缺失 {log.missingCount}
-                          </span>
-                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-yellow-50 text-yellow-600">
-                            疑点 {log.doubtCount}
-                          </span>
-                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-600">
-                            建议 {log.suggestionCount}
-                          </span>
-                        </div>
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-600">
+                              自查 {log.selfCheckScore} 分
+                            </span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-red-50 text-red-600">
+                              缺失 {log.missingCount}
+                            </span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-yellow-50 text-yellow-600">
+                              疑点 {log.doubtCount}
+                            </span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded bg-blue-50 text-blue-600">
+                              建议 {log.suggestionCount}
+                            </span>
+                          </div>
+                        </button>
+
+                        {isExpanded && (
+                          <div className="p-4 bg-white border-t border-gray-200 space-y-3">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                              <div>
+                                <div className="flex items-center gap-1 mb-2">
+                                  <XCircle className="w-4 h-4 text-red-500" />
+                                  <span className="text-sm font-medium text-gray-700">缺失项（前3条）</span>
+                                </div>
+                                {snapshotMissing.length === 0 ? (
+                                  <p className="text-xs text-gray-400">无</p>
+                                ) : (
+                                  <ul className="space-y-1">
+                                    {snapshotMissing.slice(0, 3).map((item) => (
+                                      <li key={item.id} className="text-xs text-gray-600 flex items-start gap-1">
+                                        <span className="text-red-400 mt-0.5">•</span>
+                                        {item.title}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+
+                              <div>
+                                <div className="flex items-center gap-1 mb-2">
+                                  <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                                  <span className="text-sm font-medium text-gray-700">疑点（前3条）</span>
+                                </div>
+                                {snapshotDoubt.length === 0 ? (
+                                  <p className="text-xs text-gray-400">无</p>
+                                ) : (
+                                  <ul className="space-y-1">
+                                    {snapshotDoubt.slice(0, 3).map((item) => (
+                                      <li key={item.id} className="text-xs text-gray-600 flex items-start gap-1">
+                                        <span className="text-yellow-400 mt-0.5">•</span>
+                                        {item.title}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+
+                              <div>
+                                <div className="flex items-center gap-1 mb-2">
+                                  <Lightbulb className="w-4 h-4 text-blue-500" />
+                                  <span className="text-sm font-medium text-gray-700">建议（前3条）</span>
+                                </div>
+                                {snapshotSuggestion.length === 0 ? (
+                                  <p className="text-xs text-gray-400">无</p>
+                                ) : (
+                                  <ul className="space-y-1">
+                                    {snapshotSuggestion.slice(0, 3).map((item) => (
+                                      <li key={item.id} className="text-xs text-gray-600 flex items-start gap-1">
+                                        <span className="text-blue-400 mt-0.5">•</span>
+                                        {item.title}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="pt-2">
+                              <button
+                                onClick={() => previewReportBySnapshot(log.snapshot)}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
+                              >
+                                <RefreshCw className="w-4 h-4" />
+                                🔄 重新打开此报告预览
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

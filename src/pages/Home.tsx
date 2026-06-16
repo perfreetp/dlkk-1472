@@ -96,13 +96,9 @@ export function Home() {
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
   const handleBusinessTypeSelect = (type: BusinessType) => {
-    const hasUploaded = materials.some((m) => m.fileName && m.fileName.length > 0);
-    if (
-      type !== declaration.businessType &&
-      declaration.currentStep > 1 &&
-      hasUploaded
-    ) {
-      if (!confirm('切换经营方式将重置材料清单，已上传的文件名和状态会被清空，是否继续？')) return;
+    const hasModifiedMaterials = materials.some(m => (m.fileName && m.fileName.length > 0) || m.status === 'uploaded');
+    if (type !== declaration.businessType && hasModifiedMaterials) {
+      if (!confirm('切换经营方式将清空当前材料清单（文件名、上传状态均会重置），是否继续？')) return;
     }
     setBusinessType(type);
   };

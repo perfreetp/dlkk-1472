@@ -1,13 +1,13 @@
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import type { Declaration, Enterprise, License, Premises, PrecheckResult, ReportOperationType } from '@/types';
+import type { Declaration, Enterprise, License, Premises, PrecheckResult, ReportOperationType, ReportLogSnapshot } from '@/types';
 import { businessTypeNames } from '@/store/declarationStore';
 
 interface ReportData {
   declaration: Declaration;
   enterprise: Enterprise;
   license: License;
-  premises: Premises;
+  premises?: Premises;
   precheckResult: PrecheckResult | null;
   selfCheckScore: number;
   addReportLog: (type: ReportOperationType, name: string) => void;
@@ -94,7 +94,7 @@ const renderReportDOM = (data: ReportData): HTMLDivElement => {
             ['法定代表人', enterprise.legalPerson],
             ['经营方式', businessTypeText],
             ['注册地址', enterprise.registeredAddress, true],
-            ['经营地址', premises.businessAddress || enterprise.businessAddress, true],
+            ['经营地址', data.premises?.businessAddress || data.enterprise.businessAddress || '', true],
             ['联系人', enterprise.contactPerson],
             ['联系电话', enterprise.contactPhone],
           ].map(([k, v, full]) => `
@@ -328,4 +328,86 @@ export function previewReport(data: ReportData): void {
   printWindow.document.close();
 
   data.addReportLog('preview', '预览报告');
+}
+
+export function previewReportBySnapshot(snapshot: ReportLogSnapshot): void {
+  const printWindow = window.open('', '_blank', 'width=920,height=1100');
+
+  if (!printWindow) {
+    alert('请允许弹出窗口以预览报告');
+    return;
+  }
+
+  const reportData: ReportData = {
+    declaration: {
+      id: snapshot.declaration.id,
+      businessType: snapshot.declaration.businessType,
+      status: 'draft',
+      currentStep: 5,
+      selfCheckScore: snapshot.declaration.selfCheckScore,
+      createdAt: '',
+      updatedAt: '',
+    } as Declaration,
+    enterprise: {
+      declarationId: snapshot.declaration.id,
+      creditCode: snapshot.enterprise.creditCode,
+      name: snapshot.enterprise.name,
+      legalPerson: '',
+      establishDate: '',
+      registeredAddress: '',
+      businessAddress: '',
+      contactPerson: '',
+      contactPhone: '',
+      email: '',
+    } as Enterprise,
+    license: {
+      declarationId: snapshot.declaration.id,
+      licenseNumber: '',
+      validFrom: '',
+      validTo: '',
+      scope: snapshot.license.scope,
+      changeRecords: [],
+    } as License,
+    precheckResult: snapshot.precheckResult,
+    selfCheckScore: snapshot.declaration.selfCheckScore,
+    addReportLog: () => {},
+  };
+
+  const container = renderReportDOM(reportData);
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>预审报告预览（历史快照） - ${snapshot.enterprise.name || '企业'}</title>
+      <meta charset="UTF-8" />
+      <style>
+        body { margin: 0; padding: 0; background: #f3f4f6; }
+        .toolbar { position:fixed; top:0; left:0; right:0; z-index:10; padding:10px 20px; background:#1E3A8A; color:#fff;
+          display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 8px rgba(0,0,0,0.15); }
+        .toolbar-title { font-size:15px; font-weight:500; }
+        .toolbar-btns { display:flex; gap:8px; }
+        .toolbar-btn { padding:6px 14px; border:1px solid rgba(255,255,255,0.3); background:transparent;
+          color:#fff; font-size:13px; border-radius:4px; cursor:pointer; }
+        .toolbar-btn:hover { background:rgba(255,255,255,0.1); }
+        .report-wrap { padding-top:56px; display:flex; justify-content:center; }
+        @media print {
+          .toolbar { display: none !important; }
+          .report-wrap { padding-top: 0; }
+          body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="toolbar">
+        <div class="toolbar-title">📄 预审报告预览（历史快照）</div>
+        <div class="toolbar-btns">
+          <button class="toolbar-btn" onclick="window.print()">🖨️ 打印</button>
+        </div>
+      </div>
+      <div class="report-wrap"></div>
+    </body>
+    </html>
+  `);
+  printWindow.document.body.querySelector('.report-wrap')!.appendChild(container);
+  printWindow.document.close();
 }

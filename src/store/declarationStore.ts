@@ -427,8 +427,10 @@ interface DeclarationStore {
   setPremises: (data: Partial<Premises>) => void;
   setMaterials: (materials: Material[]) => void;
   updateMaterial: (id: string, data: Partial<Material>) => void;
-  batchUpdateMaterialsStatus: (status: MaterialStatus) => void;
+  batchUpdateMaterialsStatus: (status: MaterialStatus) => number | void;
   fillMockMaterials: () => void;
+  batchUpdateCategoryMaterialsStatus: (category: string, status: MaterialStatus) => void;
+  fillMockCategoryMaterials: (category: string) => void;
   saveVersion: (changes: string) => void;
   runPrecheck: () => void;
   calculateSelfCheckScore: () => number;
@@ -664,21 +666,104 @@ export const useDeclarationStore = create<DeclarationStore>((set, get) => ({
   },
 
   addReportLog: (operationType: ReportOperationType, operationName: string) => {
-    const { declaration, precheckResult, reportLogs, versionHistories } = get();
+    const { declaration, precheckResult, reportLogs, versionHistories, enterprise, license } = get();
+    const now = new Date();
+    const dateKey = now.toISOString().split('T')[0];
+    const snapshot: any = {
+      declaration: {
+        id: declaration.id,
+        businessType: declaration.businessType,
+        selfCheckScore: declaration.selfCheckScore,
+      },
+      enterprise: {
+        name: enterprise.name,
+        creditCode: enterprise.creditCode,
+      },
+      license: {
+        scope: license.scope,
+      },
+      precheckResult: precheckResult || {
+        declarationId: declaration.id,
+        missingItems: [],
+        doubtItems: [],
+        suggestions: [],
+      },
+    };
     const log: ReportLog = {
       id: generateId(),
       operationType,
       operationName,
-      createdAt: new Date().toISOString(),
+      createdAt: now.toISOString(),
       selfCheckScore: declaration.selfCheckScore,
       missingCount: precheckResult?.missingItems.length || 0,
       doubtCount: precheckResult?.doubtItems.length || 0,
       suggestionCount: precheckResult?.suggestions.length || 0,
       version: versionHistories.length > 0 ? versionHistories[versionHistories.length - 1].version : undefined,
+      enterpriseName: enterprise.name || '未命名企业',
+      enterpriseCreditCode: enterprise.creditCode || '',
+      dateKey,
+      snapshot,
     };
     set({
-      reportLogs: [log, ...reportLogs].slice(0, 20),
+      reportLogs: [log, ...reportLogs].slice(0, 50),
     });
+  },
+
+  batchUpdateCategoryMaterialsStatus: (category: string, status: MaterialStatus) => {
+    set((state) => ({
+      materials: state.materials.map((m) =>
+        m.category === category
+          ? {
+              ...m,
+              status,
+              fileName: status === 'uploaded' ? (m.fileName || `${m.name}_示例.pdf`) : m.fileName,
+            }
+          : m
+      ),
+      declaration: { ...state.declaration, updatedAt: new Date().toISOString() },
+    }));
+    get().calculateSelfCheckScore();
+  },
+
+  fillMockCategoryMaterials: (category: string) => {
+    const mockFileNames: Record<string, string> = {
+      '营业执照副本': '营业执照_2026.jpg',
+      '法定代表人身份证明': '法人身份证正反面.jpg',
+      '原成品油经营批准证书（如有）': '成品油批准证书.pdf',
+      '主要负责人安全资格证书': '主要负责人证_张明.pdf',
+      '安全生产管理人员安全资格证书': '安全员证_王强.pdf',
+      '从业人员培训合格证明': '从业人员培训合格证.pdf',
+      '从业人员安全培训记录': '年度安全培训记录.xlsx',
+      '经营场所产权证明或租赁协议': '经营场所房产证.pdf',
+      '储存场所产权证明或租赁协议': '储存场所租赁协议.pdf',
+      '安全评价报告': '安全评价现状报告_2026.pdf',
+      '安全管理制度汇编': '安全管理制度汇编_v3.pdf',
+      '安全生产责任制': '安全生产责任制文件.pdf',
+      '生产安全事故应急预案': '应急预案_v2.pdf',
+      '应急预案备案登记表': '应急预案备案回执.pdf',
+      '应急演练记录': '年度应急演练记录.docx',
+      '消防设施验收或检测合格证明': '消防检测报告_2026.pdf',
+      '申报材料真实性承诺书': '承诺书_签字盖章.pdf',
+      '加油机计量检定证书': '加油机检定证书.pdf',
+      '油气回收系统检测报告': '油气回收检测报告.pdf',
+      '柴油储罐检测报告': '储罐年度检测报告.pdf',
+      '仓储设施安全检测报告': '仓储设施检测报告.pdf',
+      '危险化学品购销合同': '购销合同样本.pdf',
+      '供货单位资质证明': '上游供货单位资质.pdf',
+    };
+    set((state) => ({
+      materials: state.materials.map((m) =>
+        m.category === category
+          ? {
+              ...m,
+              status: 'uploaded' as MaterialStatus,
+              fileName: mockFileNames[m.name] || `${m.name}_示例.pdf`,
+            }
+          : m
+      ),
+      declaration: { ...state.declaration, updatedAt: new Date().toISOString() },
+    }));
+    get().calculateSelfCheckScore();
   },
 
   resetDeclaration: () => {

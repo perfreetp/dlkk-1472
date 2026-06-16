@@ -103,6 +103,7 @@ const CircularProgress = ({
         </div>
       </div>
       <div className="flex flex-col gap-3">
+        <div className="text-xs text-gray-400 font-medium">全局操作</div>
         <button
           onClick={onFillMock}
           className="inline-flex items-center gap-2 px-4 py-2.5 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors whitespace-nowrap"
@@ -206,6 +207,8 @@ export function Materials() {
     isLoading,
     batchUpdateMaterialsStatus,
     fillMockMaterials,
+    batchUpdateCategoryMaterialsStatus,
+    fillMockCategoryMaterials,
   } = useDeclarationStore();
 
   const [expandedCategory, setExpandedCategory] = useState<MaterialCategory | null>(
@@ -266,32 +269,63 @@ export function Materials() {
                   const counts = getCategoryCounts(category);
                   const isExpanded = expandedCategory === category;
                   return (
-                    <button
-                      key={category}
-                      onClick={() => setExpandedCategory(isExpanded ? null : category)}
-                      className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-left transition-colors ${
-                        isExpanded
-                          ? 'bg-blue-50 text-blue-600'
-                          : 'text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      {isExpanded ? (
-                        <ChevronDown className="w-4 h-4" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4" />
-                      )}
-                      <Folder className="w-4 h-4" />
-                      <span className="flex-1 text-sm font-medium">{category}</span>
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded-full ${
+                    <div key={category}>
+                      <div
+                        className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-left transition-colors ${
                           isExpanded
-                            ? 'bg-blue-100 text-blue-600'
-                            : 'bg-gray-100 text-gray-600'
+                            ? 'bg-blue-50 text-blue-600'
+                            : 'text-gray-700 hover:bg-gray-50'
                         }`}
                       >
-                        {counts.uploaded}/{counts.total}
-                      </span>
-                    </button>
+                        <button
+                          onClick={() => setExpandedCategory(isExpanded ? null : category)}
+                          className="flex items-center gap-2 flex-1 min-w-0"
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="w-4 h-4 flex-shrink-0" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4 flex-shrink-0" />
+                          )}
+                          <Folder className="w-4 h-4 flex-shrink-0" />
+                          <span className="text-sm font-medium truncate">{category}</span>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
+                              isExpanded
+                                ? 'bg-blue-100 text-blue-600'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}
+                          >
+                            {counts.uploaded}/{counts.total}
+                          </span>
+                        </button>
+                        {isExpanded && (
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                fillMockCategoryMaterials(category);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-500 text-white text-xs rounded hover:bg-yellow-600 transition-colors"
+                              title="补齐示例材料"
+                            >
+                              <Zap className="w-3 h-3" />
+                              补齐
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                batchUpdateCategoryMaterialsStatus(category, 'uploaded');
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors"
+                              title="标记已上传"
+                            >
+                              <UploadCloud className="w-3 h-3" />
+                              标记已上传
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   );
                 })}
               </nav>

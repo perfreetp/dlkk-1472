@@ -112,6 +112,13 @@ export interface PrecheckItem {
 
 export type ReportOperationType = 'preview' | 'print' | 'download';
 
+export interface ReportLogSnapshot {
+  declaration: { id: string; businessType: BusinessType; selfCheckScore: number };
+  enterprise: { name: string; creditCode: string };
+  license: { scope: string };
+  precheckResult: PrecheckResult;
+}
+
 export interface ReportLog {
   id: string;
   operationType: ReportOperationType;
@@ -122,6 +129,10 @@ export interface ReportLog {
   doubtCount: number;
   suggestionCount: number;
   version?: number;
+  enterpriseName: string;
+  enterpriseCreditCode: string;
+  dateKey: string;
+  snapshot: ReportLogSnapshot;
 }
 
 export interface PrecheckResult {
