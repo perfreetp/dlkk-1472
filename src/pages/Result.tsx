@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -23,8 +23,8 @@ import {
 } from 'lucide-react';
 import { useDeclarationStore } from '@/store/declarationStore';
 import { formatDate } from '@/utils/dateUtils';
-import { generatePDF, printReport, previewReport, previewReportBySnapshot } from '@/services/reportService';
-import type { PrecheckItem, ReportLog, ReportOperationType } from '@/types';
+import { generatePDF, printReport, previewReport, previewReportBySnapshot, exportChecklist, type ChecklistExportItem } from '@/services/reportService';
+import type { PrecheckItem } from '@/types';
 
 const getConclusion = (score: number, missingCount: number) => {
   if (score >= 80 && missingCount === 0) {
@@ -77,6 +77,18 @@ const ProblemCard = ({
 
   const Icon = colorConfig.icon;
 
+  const isMaterialWithCategory = item.relatedPage === 'materials' && item.relatedCategory;
+
+  const handleClick = () => {
+    if (isMaterialWithCategory) {
+      const category = encodeURIComponent(item.relatedCategory!);
+      const highlight = encodeURIComponent(item.relatedMaterialId || item.relatedMaterialName || '');
+      navigate(`/materials?category=${category}&highlight=${highlight}`);
+    } else {
+      navigate(getPageRoute(item.relatedPage));
+    }
+  };
+
   return (
     <div className={`bg-white rounded-lg border-l-4 ${colorConfig.border} border border-gray-200 p-4`}>
       <div className="flex items-start justify-between gap-4">
@@ -92,11 +104,11 @@ const ProblemCard = ({
           </div>
         </div>
         <button
-          onClick={() => navigate(getPageRoute(item.relatedPage))}
+          onClick={handleClick}
           className="flex-shrink-0 inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-md hover:bg-gray-200 transition-colors"
         >
           <ExternalLink className="w-3.5 h-3.5" />
-          前往修正
+          {isMaterialWithCategory ? '📎 定位材料' : '前往修正'}
         </button>
       </div>
     </div>
@@ -228,6 +240,8 @@ export function Result() {
       id: string;
       priority: 'P0' | 'P1' | 'P2';
       title: string;
+      suggestion: string;
+      originalItem?: PrecheckItem;
     }> = [];
 
     missingItems.forEach((item) => {
@@ -235,6 +249,8 @@ export function Result() {
         id: `missing-${item.id}`,
         priority: 'P0',
         title: item.title,
+        suggestion: item.suggestion,
+        originalItem: item,
       });
     });
 
@@ -244,6 +260,7 @@ export function Result() {
         id: 'license-expiry',
         priority: 'P0',
         title: `许可证即将到期（剩余${licenseDays}天）`,
+        suggestion: '请尽快办理换证手续，避免许可证过期影响经营',
       });
     }
 
@@ -252,6 +269,8 @@ export function Result() {
         id: `doubt-${item.id}`,
         priority: 'P1',
         title: item.title,
+        suggestion: item.suggestion,
+        originalItem: item,
       });
     });
 
@@ -260,11 +279,24 @@ export function Result() {
         id: `suggestion-${item.id}`,
         priority: 'P2',
         title: item.title,
+        suggestion: item.suggestion,
+        originalItem: item,
       });
     });
 
     return items;
   }, [missingItems, doubtItems, suggestions, license.validTo]);
+
+  useEffect(() => {
+    const validIds = new Set(checklistItems.map((item) => item.id));
+    setCheckedItems((prev) => {
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (validIds.has(id)) next.add(id);
+      });
+      return next;
+    });
+  }, [checklistItems]);
 
   const toggleCheckItem = (itemId: string) => {
     setCheckedItems((prev) => {
@@ -279,6 +311,17 @@ export function Result() {
   };
 
   const allChecked = checklistItems.length > 0 && checkedItems.size === checklistItems.length;
+
+  const handleExportChecklist = () => {
+    const exportItems: ChecklistExportItem[] = checklistItems.map((item) => ({
+      id: item.id,
+      priority: item.priority,
+      title: item.title,
+      suggestion: item.suggestion,
+      checked: checkedItems.has(item.id),
+    }));
+    exportChecklist(exportItems, enterprise.name || '未命名企业');
+  };
 
   const reportData = {
     declaration,
@@ -352,10 +395,19 @@ export function Result() {
         </section>
 
         <section className="bg-white rounded-xl shadow-sm p-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <CheckSquare className="w-5 h-5" />
-            📋 提交前核对清单
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+              <CheckSquare className="w-5 h-5" />
+              📋 提交前核对清单
+            </h2>
+            <button
+              onClick={handleExportChecklist}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              导出核对单
+            </button>
+          </div>
 
           <div className="mb-4 flex items-center justify-between">
             <div className="text-sm text-gray-600">

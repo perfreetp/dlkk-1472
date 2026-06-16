@@ -13,6 +13,7 @@ import type {
   ReportLog,
   ReportOperationType,
   MaterialStatus,
+  ReportLogSnapshot,
 } from '@/types';
 import { mockData } from '@/data/mockData';
 import { generateMaterialsByBusinessType } from '@/data/materialTemplates';
@@ -338,6 +339,9 @@ const runPrecheckLogic = (
         description: `材料分类：${material.category}，状态：待上传`,
         suggestion: '请在材料清单页面上传该材料',
         relatedPage: 'materials',
+        relatedCategory: material.category,
+        relatedMaterialId: material.id,
+        relatedMaterialName: material.name,
       });
     }
     if (material.status === 'invalid') {
@@ -348,6 +352,9 @@ const runPrecheckLogic = (
         description: material.remark || '材料审核未通过',
         suggestion: '请根据备注说明重新上传符合要求的材料',
         relatedPage: 'materials',
+        relatedCategory: material.category,
+        relatedMaterialId: material.id,
+        relatedMaterialName: material.name,
       });
     }
   });
@@ -666,28 +673,21 @@ export const useDeclarationStore = create<DeclarationStore>((set, get) => ({
   },
 
   addReportLog: (operationType: ReportOperationType, operationName: string) => {
-    const { declaration, precheckResult, reportLogs, versionHistories, enterprise, license } = get();
+    const { declaration, precheckResult, reportLogs, versionHistories, enterprise, license, premises, materials } = get();
     const now = new Date();
     const dateKey = now.toISOString().split('T')[0];
-    const snapshot: any = {
-      declaration: {
-        id: declaration.id,
-        businessType: declaration.businessType,
-        selfCheckScore: declaration.selfCheckScore,
-      },
-      enterprise: {
-        name: enterprise.name,
-        creditCode: enterprise.creditCode,
-      },
-      license: {
-        scope: license.scope,
-      },
+    const snapshot: ReportLogSnapshot = {
+      declaration: { ...declaration },
+      enterprise: { ...enterprise },
+      license: { ...license },
+      premises: { ...premises },
       precheckResult: precheckResult || {
         declarationId: declaration.id,
         missingItems: [],
         doubtItems: [],
         suggestions: [],
       },
+      materials: materials.map((m) => ({ ...m })),
     };
     const log: ReportLog = {
       id: generateId(),

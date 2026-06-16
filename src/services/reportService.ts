@@ -339,35 +339,10 @@ export function previewReportBySnapshot(snapshot: ReportLogSnapshot): void {
   }
 
   const reportData: ReportData = {
-    declaration: {
-      id: snapshot.declaration.id,
-      businessType: snapshot.declaration.businessType,
-      status: 'draft',
-      currentStep: 5,
-      selfCheckScore: snapshot.declaration.selfCheckScore,
-      createdAt: '',
-      updatedAt: '',
-    } as Declaration,
-    enterprise: {
-      declarationId: snapshot.declaration.id,
-      creditCode: snapshot.enterprise.creditCode,
-      name: snapshot.enterprise.name,
-      legalPerson: '',
-      establishDate: '',
-      registeredAddress: '',
-      businessAddress: '',
-      contactPerson: '',
-      contactPhone: '',
-      email: '',
-    } as Enterprise,
-    license: {
-      declarationId: snapshot.declaration.id,
-      licenseNumber: '',
-      validFrom: '',
-      validTo: '',
-      scope: snapshot.license.scope,
-      changeRecords: [],
-    } as License,
+    declaration: snapshot.declaration,
+    enterprise: snapshot.enterprise,
+    license: snapshot.license,
+    premises: snapshot.premises,
     precheckResult: snapshot.precheckResult,
     selfCheckScore: snapshot.declaration.selfCheckScore,
     addReportLog: () => {},
@@ -390,8 +365,10 @@ export function previewReportBySnapshot(snapshot: ReportLogSnapshot): void {
           color:#fff; font-size:13px; border-radius:4px; cursor:pointer; }
         .toolbar-btn:hover { background:rgba(255,255,255,0.1); }
         .report-wrap { padding-top:56px; display:flex; justify-content:center; }
+        .snapshot-watermark { position: fixed; bottom: 10px; right: 20px; font-size: 11px; color: #999; background: rgba(255,255,255,0.8); padding: 4px 10px; border-radius: 4px; z-index: 100; }
         @media print {
           .toolbar { display: none !important; }
+          .snapshot-watermark { display: none !important; }
           .report-wrap { padding-top: 0; }
           body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
@@ -404,10 +381,250 @@ export function previewReportBySnapshot(snapshot: ReportLogSnapshot): void {
           <button class="toolbar-btn" onclick="window.print()">🖨️ 打印</button>
         </div>
       </div>
+      <div class="snapshot-watermark">📅 快照时间：${new Date(snapshot.declaration.updatedAt || '').toLocaleString()}</div>
       <div class="report-wrap"></div>
     </body>
     </html>
   `);
   printWindow.document.body.querySelector('.report-wrap')!.appendChild(container);
+  printWindow.document.close();
+}
+
+export interface ChecklistExportItem {
+  id: string;
+  priority: 'P0' | 'P1' | 'P2';
+  title: string;
+  suggestion: string;
+  checked: boolean;
+}
+
+const getPriorityColor = (priority: 'P0' | 'P1' | 'P2'): string => {
+  switch (priority) {
+    case 'P0': return '#DC2626';
+    case 'P1': return '#D97706';
+    case 'P2': return '#2563EB';
+  }
+};
+
+const getPriorityBg = (priority: 'P0' | 'P1' | 'P2'): string => {
+  switch (priority) {
+    case 'P0': return '#FEF2F2';
+    case 'P1': return '#FFFBEB';
+    case 'P2': return '#EFF6FF';
+  }
+};
+
+export function exportChecklist(
+  items: ChecklistExportItem[],
+  enterpriseName: string
+): void {
+  const printWindow = window.open('', '_blank', 'width=920,height=1100');
+
+  if (!printWindow) {
+    alert('请允许弹出窗口以预览核对单');
+    return;
+  }
+
+  const reportDate = formatDate(new Date());
+  const priorityColor = (p: 'P0' | 'P1' | 'P2') => getPriorityColor(p);
+  const priorityBg = (p: 'P0' | 'P1' | 'P2') => getPriorityBg(p);
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>内部核对单 - ${enterpriseName || '企业'}</title>
+      <meta charset="UTF-8" />
+      <style>
+        body { margin: 0; padding: 0; background: #f3f4f6; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; }
+        .toolbar { position:fixed; top:0; left:0; right:0; z-index:10; padding:10px 20px; background:#1E3A8A; color:#fff;
+          display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 8px rgba(0,0,0,0.15); }
+        .toolbar-title { font-size:15px; font-weight:500; }
+        .toolbar-btns { display:flex; gap:8px; }
+        .toolbar-btn { padding:6px 14px; border:1px solid rgba(255,255,255,0.3); background:transparent;
+          color:#fff; font-size:13px; border-radius:4px; cursor:pointer; font-family: inherit; }
+        .toolbar-btn:hover { background:rgba(255,255,255,0.1); }
+        .checklist-wrap { padding-top:56px; display:flex; justify-content:center; }
+        .checklist-container {
+          width: 820px;
+          padding: 40px;
+          background: #ffffff;
+          color: #1f2937;
+          position: relative;
+          min-height: 1100px;
+          box-sizing: border-box;
+        }
+        .checklist-header {
+          text-align: center;
+          border-bottom: 2px solid #1E3A8A;
+          padding-bottom: 16px;
+          margin-bottom: 24px;
+        }
+        .checklist-title {
+          font-size: 22px;
+          font-weight: bold;
+          color: #1E3A8A;
+          letter-spacing: 2px;
+        }
+        .checklist-meta {
+          display: flex;
+          justify-content: space-between;
+          margin-top: 12px;
+          font-size: 14px;
+          color: #4b5563;
+        }
+        .checklist-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 40px;
+        }
+        .checklist-table th {
+          background: #1E3A8A;
+          color: #fff;
+          padding: 12px 10px;
+          text-align: center;
+          font-size: 14px;
+          font-weight: 600;
+          border: 1px solid #1E3A8A;
+        }
+        .checklist-table td {
+          padding: 12px 10px;
+          font-size: 13px;
+          border: 1px solid #e5e7eb;
+          vertical-align: middle;
+        }
+        .checklist-table tr:nth-child(even) {
+          background: #F9FAFB;
+        }
+        .priority-badge {
+          display: inline-block;
+          padding: 4px 10px;
+          border-radius: 4px;
+          font-weight: 600;
+          font-size: 12px;
+          text-align: center;
+          min-width: 36px;
+        }
+        .checked-cell {
+          text-align: center;
+          font-size: 18px;
+        }
+        .checked-yes {
+          color: #059669;
+          font-weight: bold;
+        }
+        .checked-no {
+          color: #DC2626;
+        }
+        .signature-section {
+          display: flex;
+          justify-content: space-around;
+          margin-top: 60px;
+          padding-top: 20px;
+          border-top: 1px solid #e5e7eb;
+        }
+        .signature-item {
+          text-align: center;
+        }
+        .signature-line {
+          width: 180px;
+          height: 40px;
+          border-bottom: 1px solid #374151;
+          margin: 0 auto;
+        }
+        .signature-label {
+          font-size: 12px;
+          color: #6b7280;
+          margin-top: 6px;
+        }
+        .empty-state {
+          text-align: center;
+          padding: 40px;
+          color: #6b7280;
+          font-size: 14px;
+          background: #F9FAFB;
+          border-radius: 6px;
+          border: 1px dashed #e5e7eb;
+        }
+        @media print {
+          .toolbar { display: none !important; }
+          .checklist-wrap { padding-top: 0; }
+          body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .checklist-container {
+            box-shadow: none;
+            margin: 0;
+            width: 100%;
+            padding: 20px;
+          }
+          @page {
+            size: A4;
+            margin: 15mm;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="toolbar">
+        <div class="toolbar-title">📋 内部核对单预览</div>
+        <div class="toolbar-btns">
+          <button class="toolbar-btn" onclick="window.print()">🖨️ 打印</button>
+        </div>
+      </div>
+      <div class="checklist-wrap">
+        <div class="checklist-container">
+          <div class="checklist-header">
+            <div class="checklist-title">危化品经营换证预审 · 内部核对单</div>
+            <div class="checklist-meta">
+              <span><strong>企业名称：</strong>${enterpriseName || '—'}</span>
+              <span><strong>生成日期：</strong>${reportDate}</span>
+            </div>
+          </div>
+
+          ${items.length === 0 ? `
+            <div class="empty-state">暂无核对项</div>
+          ` : `
+            <table class="checklist-table">
+              <thead>
+                <tr>
+                  <th style="width: 80px;">优先级</th>
+                  <th style="width: 280px;">风险项</th>
+                  <th>建议补正方向</th>
+                  <th style="width: 100px;">是否已核对</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${items.map((item) => `
+                  <tr>
+                    <td style="text-align: center;">
+                      <span class="priority-badge" style="background: ${priorityBg(item.priority)}; color: ${priorityColor(item.priority)};">
+                        ${item.priority}
+                      </span>
+                    </td>
+                    <td style="font-weight: 500; color: #111;">${item.title}</td>
+                    <td style="color: #4b5563; line-height: 1.6;">${item.suggestion}</td>
+                    <td class="checked-cell">
+                      ${item.checked ? '<span class="checked-yes">✓</span>' : '<span class="checked-no">✗</span>'}
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `}
+
+          <div class="signature-section">
+            <div class="signature-item">
+              <div class="signature-line"></div>
+              <div class="signature-label">办事员签字</div>
+            </div>
+            <div class="signature-item">
+              <div class="signature-line"></div>
+              <div class="signature-label">日期</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `);
   printWindow.document.close();
 }

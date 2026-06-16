@@ -108,15 +108,20 @@ export interface PrecheckItem {
   description: string;
   suggestion: string;
   relatedPage?: string;
+  relatedCategory?: string;
+  relatedMaterialId?: string;
+  relatedMaterialName?: string;
 }
 
 export type ReportOperationType = 'preview' | 'print' | 'download';
 
 export interface ReportLogSnapshot {
-  declaration: { id: string; businessType: BusinessType; selfCheckScore: number };
-  enterprise: { name: string; creditCode: string };
-  license: { scope: string };
+  declaration: Declaration;
+  enterprise: Enterprise;
+  license: License;
+  premises: Premises;
   precheckResult: PrecheckResult;
+  materials: Material[];
 }
 
 export interface ReportLog {

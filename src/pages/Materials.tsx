@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   RefreshCw,
   Upload,
@@ -140,7 +140,13 @@ const StatusBadge = ({ status }: { status: MaterialStatus }) => {
   );
 };
 
-const MaterialCard = ({ material }: { material: Material }) => {
+const MaterialCard = ({
+  material,
+  isHighlighted,
+}: {
+  material: Material;
+  isHighlighted: boolean;
+}) => {
   const updateMaterial = useDeclarationStore((state) => state.updateMaterial);
 
   const handleUpload = () => {
@@ -154,7 +160,13 @@ const MaterialCard = ({ material }: { material: Material }) => {
   };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow">
+    <div
+      className={`bg-white rounded-lg border p-4 hover:shadow-md transition-all ${
+        isHighlighted
+          ? 'ring-2 ring-blue-500 border-blue-500 bg-blue-50 animate-[pulse_0.5s_ease-in-out_2]'
+          : 'border-gray-200'
+      }`}
+    >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-start gap-2">
           <FileText className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
@@ -197,6 +209,7 @@ const MaterialCard = ({ material }: { material: Material }) => {
 
 export function Materials() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     declaration,
     materials,
@@ -216,6 +229,47 @@ export function Materials() {
   );
   const [showVersionDialog, setShowVersionDialog] = useState(false);
   const [versionNote, setVersionNote] = useState('');
+  const [highlightMaterialId, setHighlightMaterialId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const categoryParam = searchParams.get('category');
+    const highlightParam = searchParams.get('highlight');
+
+    if (categoryParam) {
+      const decodedCategory = decodeURIComponent(categoryParam) as MaterialCategory;
+      if (MATERIAL_CATEGORIES.includes(decodedCategory)) {
+        setExpandedCategory(decodedCategory);
+        setTimeout(() => {
+          const element = document.querySelector(`[data-category="${decodedCategory}"]`);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 100);
+      }
+    }
+
+    if (highlightParam) {
+      const decodedHighlight = decodeURIComponent(highlightParam);
+      setHighlightMaterialId(decodedHighlight);
+      setTimeout(() => {
+        setHighlightMaterialId(null);
+      }, 3000);
+    }
+
+    if (categoryParam || highlightParam) {
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (highlightMaterialId) {
+        setHighlightMaterialId(null);
+      }
+    };
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [highlightMaterialId]);
 
   const getCategoryCounts = (category: MaterialCategory) => {
     const categoryMaterials = materials.filter((m) => m.category === category);
@@ -333,11 +387,19 @@ export function Materials() {
 
             <div className="flex-1">
               {expandedCategory && (
-                <div className="space-y-3">
+                <div className="space-y-3" data-category={expandedCategory}>
                   {materials
                     .filter((m) => m.category === expandedCategory)
                     .map((material) => (
-                      <MaterialCard key={material.id} material={material} />
+                      <MaterialCard
+                        key={material.id}
+                        material={material}
+                        isHighlighted={
+                          highlightMaterialId !== null &&
+                          (material.id === highlightMaterialId ||
+                            material.name === highlightMaterialId)
+                        }
+                      />
                     ))}
                 </div>
               )}
