@@ -35,8 +35,6 @@ export function Premises() {
 
   const businessFileRef = useRef<HTMLInputElement>(null);
   const storageFileRef = useRef<HTMLInputElement>(null);
-  const [businessFileName, setBusinessFileName] = useState('');
-  const [storageFileName, setStorageFileName] = useState('');
   const [otherFacilityName, setOtherFacilityName] = useState('');
 
   const addressMatch = premises.businessAddress && premises.storageAddress
@@ -48,14 +46,14 @@ export function Premises() {
   const handleBusinessFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setBusinessFileName(file.name);
+      setPremises({ businessPropertyFileName: file.name });
     }
   };
 
   const handleStorageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setStorageFileName(file.name);
+      setPremises({ storagePropertyFileName: file.name });
     }
   };
 
@@ -374,12 +372,12 @@ export function Premises() {
                   <Upload className="w-4 h-4" />
                   上传证明
                 </button>
-                {businessFileName ? (
+                {premises.businessPropertyFileName ? (
                   <span className="inline-flex items-center gap-1.5 text-sm text-gray-600">
                     <File className="w-4 h-4 text-blue-500" />
-                    {businessFileName}
+                    {premises.businessPropertyFileName}
                     <button
-                      onClick={() => { setBusinessFileName(''); if (businessFileRef.current) businessFileRef.current.value = ''; }}
+                      onClick={() => { setPremises({ businessPropertyFileName: '' }); if (businessFileRef.current) businessFileRef.current.value = ''; }}
                       className="ml-1 p-0.5 text-gray-400 hover:text-gray-600 rounded"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -486,12 +484,12 @@ export function Premises() {
                     <Upload className="w-4 h-4" />
                     上传证明
                   </button>
-                  {storageFileName ? (
+                  {premises.storagePropertyFileName ? (
                     <span className="inline-flex items-center gap-1.5 text-sm text-gray-600">
                       <File className="w-4 h-4 text-blue-500" />
-                      {storageFileName}
+                      {premises.storagePropertyFileName}
                       <button
-                        onClick={() => { setStorageFileName(''); if (storageFileRef.current) storageFileRef.current.value = ''; }}
+                        onClick={() => { setPremises({ storagePropertyFileName: '' }); if (storageFileRef.current) storageFileRef.current.value = ''; }}
                         className="ml-1 p-0.5 text-gray-400 hover:text-gray-600 rounded"
                       >
                         <X className="w-3.5 h-3.5" />

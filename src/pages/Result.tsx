@@ -15,9 +15,11 @@ import {
   Clock,
   FileText,
   GitCompare,
+  Eye,
 } from 'lucide-react';
 import { useDeclarationStore } from '@/store/declarationStore';
 import { formatDate } from '@/utils/dateUtils';
+import { generatePDF, printReport, previewReport } from '@/services/reportService';
 import type { PrecheckItem } from '@/types';
 
 const getConclusion = (score: number, missingCount: number) => {
@@ -145,6 +147,8 @@ export function Result() {
   const {
     declaration,
     enterprise,
+    license,
+    premises,
     materials,
     precheckResult,
     versionHistories,
@@ -160,9 +164,27 @@ export function Result() {
   const suggestions = precheckResult?.suggestions || [];
   const conclusion = getConclusion(declaration.selfCheckScore, missingItems.length);
 
-  const handleDownload = () => {
+  const reportData = {
+    declaration,
+    enterprise,
+    license,
+    premises,
+    precheckResult,
+    selfCheckScore: declaration.selfCheckScore,
+  };
+
+  const handleDownload = async () => {
+    await generatePDF(reportData);
     setShowDownloadToast(true);
     setTimeout(() => setShowDownloadToast(false), 3000);
+  };
+
+  const handlePrint = async () => {
+    await printReport(reportData);
+  };
+
+  const handlePreview = () => {
+    previewReport(reportData);
   };
 
   const toggleVersion = (versionId: string) => {
@@ -277,13 +299,29 @@ export function Result() {
         <section className="bg-white rounded-xl shadow-sm p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-gray-800">预审报告预览</h2>
-            <button
-              onClick={handleDownload}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              下载报告
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handlePreview}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <Eye className="w-4 h-4" />
+                预览
+              </button>
+              <button
+                onClick={handlePrint}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+              >
+                <Printer className="w-4 h-4" />
+                打印
+              </button>
+              <button
+                onClick={handleDownload}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                下载PDF
+              </button>
+            </div>
           </div>
 
           <div className="bg-gray-100 p-8 rounded-lg">
@@ -482,11 +520,18 @@ export function Result() {
               重新预审
             </button>
             <button
-              onClick={handleDownload}
-              className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              onClick={handlePrint}
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-white text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors"
             >
               <Printer className="w-4 h-4" />
               打印报告
+            </button>
+            <button
+              onClick={handleDownload}
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              下载PDF
             </button>
           </div>
         </div>

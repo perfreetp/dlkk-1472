@@ -72,9 +72,11 @@ export interface Premises {
   declarationId: string;
   businessAddress: string;
   businessPropertyType: 'own' | 'lease';
+  businessPropertyFileName: string;
   storageAddress: string;
   storageCapacity: string;
   storagePropertyType: 'own' | 'lease';
+  storagePropertyFileName: string;
   facilities: Facility[];
   safetyEquipments: SafetyEquipment[];
 }

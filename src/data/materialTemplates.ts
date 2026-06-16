@@ -15,12 +15,17 @@ const baseMaterialTemplates: MaterialTemplate[] = [
   { name: '原成品油经营批准证书（如有）', category: '企业资质类', required: false },
   { name: '主要负责人安全资格证书', category: '人员资质类', required: true },
   { name: '安全生产管理人员安全资格证书', category: '人员资质类', required: true },
-  { name: '从业人员培训合格证明', category: '人员资质类', required: false },
+  { name: '从业人员培训合格证明', category: '人员资质类', required: true },
+  { name: '从业人员安全培训记录', category: '人员资质类', required: true },
   { name: '经营场所产权证明或租赁协议', category: '场所设施类', required: true },
+  { name: '储存场所产权证明或租赁协议', category: '场所设施类', required: false },
+  { name: '安全评价报告', category: '安全管理类', required: true },
   { name: '安全管理制度汇编', category: '安全管理类', required: true },
   { name: '安全生产责任制', category: '安全管理类', required: true },
   { name: '生产安全事故应急预案', category: '安全管理类', required: true },
-  { name: '应急演练记录', category: '安全管理类', required: false },
+  { name: '应急预案备案登记表', category: '安全管理类', required: true },
+  { name: '应急演练记录', category: '安全管理类', required: true },
+  { name: '消防设施验收或检测合格证明', category: '安全管理类', required: true },
   { name: '申报材料真实性承诺书', category: '其他材料', required: true },
 ];
 
@@ -52,6 +57,13 @@ function generateMaterialId(index: number): string {
 function getTemplatesByBusinessType(businessType: BusinessType): MaterialTemplate[] {
   let templates = [...baseMaterialTemplates];
 
+  templates = templates.map((t) => {
+    if (t.name === '储存场所产权证明或租赁协议') {
+      return { ...t, required: businessType !== 'bill' };
+    }
+    return t;
+  });
+
   switch (businessType) {
     case 'gasoline':
       templates = [...templates, ...gasolineSpecificTemplates, ...dieselSpecificTemplates];
@@ -60,9 +72,27 @@ function getTemplatesByBusinessType(businessType: BusinessType): MaterialTemplat
       templates = [...templates, ...dieselSpecificTemplates];
       break;
     case 'storage':
+      templates = templates.map((t) => {
+        if (t.name === '储存场所产权证明或租赁协议') {
+          return { ...t, required: true, remark: '仓储经营必须提供' };
+        }
+        if (t.name === '安全评价报告') {
+          return { ...t, required: true, remark: '仓储经营必须提供现状评价' };
+        }
+        return t;
+      });
       templates = [...templates, ...storageSpecificTemplates];
       break;
     case 'bill':
+      templates = templates.map((t) => {
+        if (t.name === '储存场所产权证明或租赁协议') {
+          return { ...t, required: false, remark: '票据贸易无需提供' };
+        }
+        if (t.name === '消防设施验收或检测合格证明') {
+          return { ...t, required: false, remark: '票据贸易无实体场所无需提供' };
+        }
+        return t;
+      });
       templates = [...templates, ...billSpecificTemplates];
       break;
     case 'other':

@@ -87,9 +87,11 @@ export const mockPremises: Premises = {
   declarationId,
   businessAddress: '上海市浦东新区张江高科技园区科苑路88号',
   businessPropertyType: 'own',
+  businessPropertyFileName: '经营场所房产证.pdf',
   storageAddress: '上海市浦东新区张江高科技园区科苑路88号',
   storageCapacity: '汽油储罐4个，总容量120立方米；柴油储罐2个，总容量60立方米',
   storagePropertyType: 'own',
+  storagePropertyFileName: '储存场所房产证.pdf',
   facilities: [
     { id: 'FAC-001', name: '汽油储罐', quantity: 4, specification: '30m³' },
     { id: 'FAC-002', name: '柴油储罐', quantity: 2, specification: '30m³' },

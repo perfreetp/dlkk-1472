@@ -54,9 +54,11 @@ const createEmptyPremises = (declarationId: string): Premises => ({
   declarationId,
   businessAddress: '',
   businessPropertyType: 'own',
+  businessPropertyFileName: '',
   storageAddress: '',
   storageCapacity: '',
   storagePropertyType: 'own',
+  storagePropertyFileName: '',
   facilities: [],
   safetyEquipments: [],
 });
@@ -66,6 +68,37 @@ const getDaysUntil = (dateStr: string): number => {
   const target = new Date(dateStr).getTime();
   const now = Date.now();
   return Math.ceil((target - now) / (1000 * 60 * 60 * 24));
+};
+
+const businessTypeKeywords: Record<BusinessType, string[]> = {
+  gasoline: ['汽油', '成品油', '石油'],
+  diesel: ['柴油', '成品油'],
+  storage: ['仓储', '储存'],
+  bill: ['票据', '贸易', '批发（无储存）'],
+  other: [],
+};
+
+const businessTypeNames: Record<BusinessType, string> = {
+  gasoline: '汽油零售',
+  diesel: '柴油零售',
+  storage: '仓储经营',
+  bill: '票据贸易',
+  other: '其他经营方式',
+};
+
+const checkBusinessScopeMatch = (businessType: BusinessType, scope: string): { matched: boolean; missingKeywords: string[] } => {
+  if (!scope) {
+    return { matched: false, missingKeywords: [] };
+  }
+  const keywords = businessTypeKeywords[businessType];
+  if (keywords.length === 0) {
+    return { matched: true, missingKeywords: [] };
+  }
+  const missingKeywords = keywords.filter((k) => !scope.includes(k));
+  return {
+    matched: missingKeywords.length === 0,
+    missingKeywords,
+  };
 };
 
 const runPrecheckLogic = (
@@ -136,6 +169,30 @@ const runPrecheckLogic = (
       suggestion: '请尽快办理换证手续，避免许可证过期影响经营',
       relatedPage: 'license',
     });
+  }
+
+  if (!license.scope) {
+    missingItems.push({
+      id: nextId(),
+      level: 'danger',
+      title: '缺少许可范围',
+      description: '原许可证信息中未填写许可范围',
+      suggestion: '请在证照核验页面填写原许可证的许可范围，需与营业执照和实际经营方式一致',
+      relatedPage: 'license',
+    });
+  } else {
+    const scopeCheck = checkBusinessScopeMatch(declaration.businessType, license.scope);
+    if (!scopeCheck.matched) {
+      const btName = businessTypeNames[declaration.businessType];
+      doubtItems.push({
+        id: nextId(),
+        level: 'warning',
+        title: '经营方式与许可范围不匹配',
+        description: `您选择的经营方式为「${btName}」，但原许可证许可范围中未包含「${scopeCheck.missingKeywords.join('、')}」等相关表述。\n当前许可范围：${license.scope}`,
+        suggestion: `请核实经营方式是否正确，或确认许可范围是否包含「${scopeCheck.missingKeywords.join('、')}」。如许可范围确实不包含拟经营的品种，请先办理许可范围变更后再申请换证。`,
+        relatedPage: 'license',
+      });
+    }
   }
 
   const hasPrincipal = personCerts.some((c) => c.role === '主要负责人');
@@ -228,6 +285,31 @@ const runPrecheckLogic = (
       title: '缺少储存场所地址',
       description: '场所与设施信息中未填写储存地址',
       suggestion: '请在场所与设施页面填写储存地址（票据贸易除外）',
+      relatedPage: 'premises',
+    });
+  }
+
+  if (!premises.businessPropertyFileName) {
+    missingItems.push({
+      id: nextId(),
+      level: 'danger',
+      title: '缺少经营场所产权或租赁证明',
+      description: '经营场所的产权证明或租赁协议尚未上传',
+      suggestion: '请在场所与设施页面上传经营场所的产权证明（房产证复印件）或房屋租赁协议',
+      relatedPage: 'premises',
+    });
+  }
+
+  if (
+    declaration.businessType !== 'bill' &&
+    !premises.storagePropertyFileName
+  ) {
+    missingItems.push({
+      id: nextId(),
+      level: 'danger',
+      title: '缺少储存场所产权或租赁证明',
+      description: '储存场所的产权证明或租赁协议尚未上传',
+      suggestion: '请在场所与设施页面上传储存场所的产权证明或租赁协议',
       relatedPage: 'premises',
     });
   }
@@ -577,5 +659,7 @@ useDeclarationStore.subscribe((state) => {
     }
   }
 });
+
+export { businessTypeNames };
 
 export default useDeclarationStore;
